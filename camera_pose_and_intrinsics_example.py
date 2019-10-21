@@ -20,6 +20,8 @@ def world_to_camera_with_pose(view_pose):
     R[1,:3] = -normalize(np.cross(R[0,:3],R[2,:3]))
     T = np.diag(np.ones(4))
     T[:3,3] = -camera_pose
+    #print('R\n', R)
+    #print('T\n', T)
     return R.dot(T)
 
 def camera_to_world_with_pose(view_pose):
@@ -85,9 +87,12 @@ if __name__ == '__main__':
     print('Instrinsic Camera Matrix')
     print(intrinsic_matrix)
     for idx,view in enumerate(traj.views):
+        print(view)
+        exit()
         # Get camera pose
         ground_truth_pose = interpolate_poses(view.shutter_open,view.shutter_close,0.5)
         world_to_camera_matrix = world_to_camera_with_pose(ground_truth_pose)
+        #print('world_to_camera_matrix: \n', world_to_camera_matrix)
         # Open the photo
         photo_path = photo_path_from_view(traj.render_path,view)
         img = Image.open(photo_path)
@@ -106,10 +111,10 @@ if __name__ == '__main__':
             # Draw black cross here
             if pixel_x_position > 0 and pixel_x_position < 319:
                 if pixel_y_position > 0 and pixel_y_position < 239:
-                    array[pixel_y_position,pixel_x_position,:] = 0.0
-                    array[pixel_y_position-1,pixel_x_position,:] = 0.0
-                    array[pixel_y_position+1,pixel_x_position,:] = 0.0
-                    array[pixel_y_position,pixel_x_position-1,:] = 0.0
-                    array[pixel_y_position,pixel_x_position+1,:] = 0.0
+                    array[pixel_y_position,pixel_x_position,0] = 255.0
+                    array[pixel_y_position-1,pixel_x_position,0] = 255.0
+                    array[pixel_y_position+1,pixel_x_position,0] = 255.0
+                    array[pixel_y_position,pixel_x_position-1,0] = 255.0
+                    array[pixel_y_position,pixel_x_position+1,0] = 255.0
                     img = Image.fromarray(np.uint8(array))
         img.save('{0}_marking_light.jpg'.format(idx))

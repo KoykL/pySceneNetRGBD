@@ -1,0 +1,86 @@
+import camera_pose_and_intrinsics_example as camera
+import numpy as np
+from PIL import Image
+import os
+import argparse
+import scenenet_pb2 as sn
+import tensorflow as tf
+import time
+WIDTH = 320
+HEIGHT = 240
+
+def unproj(trajectories, opts):
+    #https://stackoverflow.com/questions/31265245/extracting-3d-coordinates-given-2d-image-points-depth-map-and-camera-calibratio
+    intrinsic_matrix = camera.camera_intrinsic_transform()
+    unproj_mat = np.linalg.inv(intrinsic_matrix[:3, :3])
+    data_prefix = opts.data_path
+    for traj  in trajectories.trajectories:
+        start = time.time()
+        for idx,view in enumerate(traj.views):
+            points_path = os.path.join(data_prefix, traj.render_path, "points")
+            points_file = os.path.join(points_path, "{}.npy".format(view.frame_num))
+            if os.path.exists(points_file):
+                print("skipping {}".format(points_file))
+                continue
+            
+            # Get camera pose
+            ground_truth_pose = camera.interpolate_poses(view.shutter_open,view.shutter_close,0.5)
+            world_to_camera_matrix = camera.world_to_camera_with_pose(ground_truth_pose)
+            #print('world_to_camera_matrix: \n', world_to_camera_matrix) 
+            #coords_aug = np.insert(coords, 1, axis=2)
+            
+            #coords = np.mgrid[0:HEIGHT, 0:WIDTH].transpose(1, 2, 0).reshape(-1, 2)
+            
+            depth_file = os.path.join(data_prefix, traj.render_path, "depth", "{}.png".format(view.frame_num))
+            
+            depth = np.array(Image.open(depth_file), dtype=np.float) / 1000
+            depth = depth.reshape(-1)
+            focal = np.array([intrinsic_matrix[1, 1], intrinsic_matrix[0, 0]])
+            center = np.array([intrinsic_matrix[2, 1], intrinsic_matrix[2, 0]])
+
+            xs_tf = tf.range(0, WIDTH)
+            ys_tf = tf.range(0, HEIGHT)
+            xs_tf, ys_tf = tf.meshgrid(xs_tf, ys_tf)
+            coords_tf = tf.reshape(tf.transpose(tf.stack([ys_tf, xs_tf]), [1, 2, 0]), [-1, 2])
+            coords_tf = tf.cast(coords_tf, dtype=tf.float32)
+            center_tf = tf.convert_to_tensor(center, dtype=tf.float32)
+            focal_tf = tf.convert_to_tensor(focal, dtype=tf.float32)
+            depth_tf = tf.convert_to_tensor(depth, dtype=tf.float32)
+            
+            coords_3d_tf = (coords_tf - center_tf) * tf.expand_dims(depth_tf, axis=-1) / focal_tf
+            
+            #coords_3d = (coords - center) * np.expand_dims(depth, axis=-1) / focal
+            os.makedirs(points_path, exist_ok=True)
+            #np.save(points_file, coords_3d)
+            np.save(points_file, coords_3d_tf.numpy())
+            pass
+        end = time.time()
+        print("loop time: ", end-start)
+        pass
+    pass
+
+def has_overlap_view(traj1, traj2):
+    points_file_1 = os.path.join(data_prefix, traj.render_path, "points", "{}.npy".format(view.frame_num))
+    points_file_2 = os.path.join(data_prefix, traj.render_path, "points", "{}.npy".format(view.frame_num))
+    points_1 = np.load(points_file_1)
+    points_2 = np.load(points_file_2)
+    pass
+def main():
+    trajectories = sn.Trajectories()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("protobuf_path", type=str, help="path of the protobuf file")
+    parser.add_argument("data_path", type=str, help="path of the data")
+    args = parser.parse_args()
+    protobuf_path = args.protobuf_path
+    data_path = args.data_path
+    try:
+        with open(protobuf_path,'rb') as f:
+            trajectories.ParseFromString(f.read())
+    except IOError:
+        print('Scenenet protobuf data not found at location:{0}'.format(data_root_path))
+        print('Please ensure you have copied the pb file to the data directory')
+        pass
+    unproj(trajectories, args)
+    pass
+if __name__ == "__main__":
+    main()
